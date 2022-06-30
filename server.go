@@ -62,11 +62,6 @@ func (p *PgFortuneBackend) Run() error {
 
 func (p *PgFortuneBackend) generateQueryResponse(query string) (response []byte, err error) {
 	switch query {
-	case "show tables;":
-		response, err = p.responder()
-		if err != nil {
-			return response, fmt.Errorf("error generating query response: %w", err)
-		}
 	case "show docs;":
 		response = []byte("https://domain.com/docs")
 	case "show demos;":
@@ -76,7 +71,10 @@ func (p *PgFortuneBackend) generateQueryResponse(query string) (response []byte,
 	case "show help;":
 		response = helpString()
 	default:
-		return response, fmt.Errorf("error generating query response: query \"%s\"", query)
+		response, err = p.responder()
+		if err != nil {
+			return response, fmt.Errorf("error generating query response: %w", err)
+		}
 	}
 
 	return response, nil
