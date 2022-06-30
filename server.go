@@ -39,27 +39,15 @@ func (p *PgFortuneBackend) Run() error {
 			return fmt.Errorf("error receiving message: %w", err)
 		}
 
-		switch msg.(type) {
+		switch a := msg.(type) {
 		case *pgproto3.Query:
-			response, err := p.responder()
+			var buf []byte
+			response, err := p.generateQueryResponse(a.String)
 			if err != nil {
-				return fmt.Errorf("error generating query response: %w", err)
+				return err
 			}
 
-			buf := (&pgproto3.RowDescription{Fields: []pgproto3.FieldDescription{
-				{
-					Name:                 []byte("fortune"),
-					TableOID:             0,
-					TableAttributeNumber: 0,
-					DataTypeOID:          25,
-					DataTypeSize:         -1,
-					TypeModifier:         -1,
-					Format:               0,
-				},
-			}}).Encode(nil)
-			buf = (&pgproto3.DataRow{Values: [][]byte{response}}).Encode(buf)
-			buf = (&pgproto3.CommandComplete{CommandTag: []byte("SELECT 1")}).Encode(buf)
-			buf = (&pgproto3.ReadyForQuery{TxStatus: 'I'}).Encode(buf)
+			buf = makeResponseData(response)
 			_, err = p.conn.Write(buf)
 			if err != nil {
 				return fmt.Errorf("error writing query response: %w", err)
@@ -70,6 +58,52 @@ func (p *PgFortuneBackend) Run() error {
 			return fmt.Errorf("received message other than Query from client: %#v", msg)
 		}
 	}
+}
+
+func (p *PgFortuneBackend) generateQueryResponse(query string) (response []byte, err error) {
+	switch query {
+	case "show docs;":
+		response = []byte("https://domain.com/docs")
+	case "show demos;":
+		response = []byte("https://domain.com/demos")
+	case "show repo;":
+		response = []byte("https://github.com/thedevdojo/wave")
+	case "show help;":
+		response = helpString()
+	default:
+		response, err = p.responder()
+		if err != nil {
+			return response, fmt.Errorf("error generating query response: %w", err)
+		}
+	}
+
+	return response, nil
+}
+
+func helpString() []byte {
+	return []byte(`Available queries
+- show docs;
+- show demos;
+- show repo;`)
+}
+
+func makeResponseData(message []byte) []byte {
+	buf := (&pgproto3.RowDescription{Fields: []pgproto3.FieldDescription{
+		{
+			Name:                 []byte("fortune"),
+			TableOID:             0,
+			TableAttributeNumber: 0,
+			DataTypeOID:          25,
+			DataTypeSize:         -1,
+			TypeModifier:         -1,
+			Format:               0,
+		},
+	}}).Encode(nil)
+	buf = (&pgproto3.DataRow{Values: [][]byte{message}}).Encode(buf)
+	buf = (&pgproto3.CommandComplete{CommandTag: []byte("SELECT 1")}).Encode(buf)
+	buf = (&pgproto3.ReadyForQuery{TxStatus: 'I'}).Encode(buf)
+
+	return buf
 }
 
 func (p *PgFortuneBackend) handleStartup() error {
